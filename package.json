@@ -1,0 +1,32 @@
+{
+  "name": "web2md",
+  "version": "1.0.0",
+  "description": "Local MCP server for token-efficient web page fetching. Converts HTML to Markdown with tiered access (outline → section → full).",
+  "type": "module",
+  "main": "server.js",
+  "bin": {
+    "web2md": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "postinstall": "npx playwright install chromium"
+  },
+  "keywords": [
+    "mcp",
+    "markdown",
+    "web",
+    "scraping",
+    "claude",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@mozilla/readability": "^0.5.0",
+    "jsdom": "^24.0.0",
+    "playwright": "^1.42.0",
+    "turndown": "^7.1.2",
+    "turndown-plugin-gfm": "^1.0.2"
+  }
+}
