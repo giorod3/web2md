@@ -2,6 +2,53 @@
 
 Local MCP server for **token-efficient** web page fetching. Converts HTML to Markdown with tiered access to minimize LLM context usage.
 
+---
+
+## For AI Agents (Quick Reference)
+
+**MANDATORY WORKFLOW — Always use tiered fetching:**
+
+```
+# Step 1: ALWAYS get outline first (cheap, ~200 tokens)
+mcp__web2md__web_outline url="https://example.com/docs"
+
+# Step 2: Review the outline, identify which section(s) you need
+
+# Step 3: Fetch ONLY the section(s) you need
+mcp__web2md__web_section url="https://example.com/docs" headings="Authentication"
+
+# Alternative: Search for specific term
+mcp__web2md__web_search url="https://example.com/docs" query="API key"
+```
+
+**DO NOT** fetch full pages unless absolutely necessary. The outline shows token counts per section.
+
+### Tool Reference
+
+| Tool | Purpose | Typical Tokens |
+|------|---------|----------------|
+| `mcp__web2md__web_outline` | Get page structure | ~200 |
+| `mcp__web2md__web_section` | Get specific heading(s) | varies |
+| `mcp__web2md__web_search` | Find term in page | varies |
+| `mcp__web2md__web_content` | Full page (capped) | ≤4000 |
+
+### Parameters
+
+All tools accept:
+- `url` (required): The URL to fetch
+- `render_js` (default: true): Set `false` for static sites (faster)
+
+Additional:
+- `web_section`: `headings` — string or array of heading names (partial match OK)
+- `web_search`: `query` — search term
+- `web_content`: `max_tokens` — cap on output (default: 4000)
+
+### Caching
+
+Results are cached for 24 hours. Same URL = instant response on subsequent calls.
+
+---
+
 ## Why?
 
 ```
