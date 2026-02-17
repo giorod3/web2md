@@ -136,7 +136,7 @@ node server.js &
 ### Option B: From Git
 
 ```bash
-git clone https://github.com/nickarella27/web2md.git ~/Development/web2md
+git clone https://github.com/giorod3/web2md.git ~/Development/web2md
 cd ~/Development/web2md
 npm install
 ```

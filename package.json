@@ -26,6 +26,14 @@
   ],
   "author": "web2md contributors",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giorod3/web2md.git"
+  },
+  "bugs": {
+    "url": "https://github.com/giorod3/web2md/issues"
+  },
+  "homepage": "https://github.com/giorod3/web2md#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@mozilla/readability": "^0.5.0",
