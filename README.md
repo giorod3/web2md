@@ -69,23 +69,44 @@ Solution:
 - Playwright rendering — handles JS-heavy SPAs
 - Readability extraction — removes ads, nav, cruft
 
-## Quick Start
+## Installation
+
+### Prerequisites
+
+- **Node.js 18+** — Check with `node --version`
+- **~200MB disk space** — For Chromium (auto-installed)
+
+### Option A: From Zip File
 
 ```bash
-# Clone
-git clone https://github.com/YOUR_USERNAME/web2md.git
-cd web2md
+# 1. Unzip to a permanent location
+unzip web2md.zip -d ~/Development/
+cd ~/Development/web2md
 
-# Install
+# 2. Install dependencies + Chromium
 npm install
 
-# Test it works
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node server.js
+# 3. Verify it works
+node server.js &
+# Should print: "web2md MCP server running"
+# Press Ctrl+C to stop
 ```
 
-## Add to Claude Code
+### Option B: From Git
 
-Add to your `.mcp.json` (in your project or `~/.claude/.mcp.json`):
+```bash
+git clone https://github.com/user/web2md.git ~/Development/web2md
+cd ~/Development/web2md
+npm install
+```
+
+### Add to Claude Code
+
+1. Find your Claude Code MCP config:
+   - **Per-project**: `.mcp.json` in your project root
+   - **Global**: `~/.claude/.mcp.json`
+
+2. Add the web2md server (use YOUR actual path):
 
 ```json
 {
@@ -93,11 +114,22 @@ Add to your `.mcp.json` (in your project or `~/.claude/.mcp.json`):
     "web2md": {
       "type": "stdio",
       "command": "node",
-      "args": ["/path/to/web2md/server.js"]
+      "args": ["/Users/YOURNAME/Development/web2md/server.js"]
     }
   }
 }
 ```
+
+3. **Restart Claude Code** — The tools won't appear until restart
+
+### Verify Installation
+
+After restart, try in Claude Code:
+```
+mcp__web2md__web_outline url="https://example.com"
+```
+
+If it returns an outline with sections and token counts, you're good!
 
 Restart Claude Code. You now have these tools:
 
