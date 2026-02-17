@@ -8,15 +8,9 @@
  *   web_section  - Get specific section(s) by heading
  *   web_content  - Get full page with token cap
  *   web_search   - Search for term within page
- *
- * Features:
- *   - Playwright for JS-heavy SPAs
- *   - Readability for content extraction
- *   - 24h disk cache
- *   - Token estimation
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
@@ -27,12 +21,13 @@ import { createHash } from "crypto";
 import { mkdir, readFile, writeFile, stat } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
+import { z } from "zod";
 
 // === CONFIG ===
 const CACHE_DIR = join(homedir(), ".cache", "web2md");
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 const DEFAULT_MAX_TOKENS = 4000;
-const CHARS_PER_TOKEN = 4; // Conservative estimate
+const CHARS_PER_TOKEN = 4;
 
 // === CACHE ===
 async function ensureCacheDir() {
@@ -295,132 +290,84 @@ async function searchInPage(url, query, renderJs = true) {
 }
 
 // === MCP SERVER ===
-const server = new Server(
-  { name: "web2md", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
-
-server.setRequestHandler("tools/list", async () => ({
-  tools: [
-    {
-      name: "web_outline",
-      description:
-        "Get the outline/structure of a webpage. Returns headings with estimated token counts. USE THIS FIRST to understand page structure before fetching content. Very cheap (~200 tokens output).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL to fetch" },
-          render_js: {
-            type: "boolean",
-            default: true,
-            description: "Render JavaScript with Playwright (for SPAs). Set false for static sites.",
-          },
-        },
-        required: ["url"],
-      },
-    },
-    {
-      name: "web_section",
-      description:
-        "Get specific section(s) of a webpage by heading name. Use after web_outline to fetch only what you need. Supports partial heading matches.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL to fetch" },
-          headings: {
-            oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
-            description: "Heading(s) to extract. Partial match supported.",
-          },
-          render_js: { type: "boolean", default: true },
-        },
-        required: ["url", "headings"],
-      },
-    },
-    {
-      name: "web_content",
-      description:
-        "Get full page content as markdown. Automatically truncates to max_tokens. Use web_outline + web_section for better efficiency.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL to fetch" },
-          max_tokens: {
-            type: "number",
-            default: 4000,
-            description: "Maximum tokens to return (default 4000)",
-          },
-          render_js: { type: "boolean", default: true },
-        },
-        required: ["url"],
-      },
-    },
-    {
-      name: "web_search",
-      description:
-        "Search for a term within a webpage. Returns matching sections with context excerpts. Useful for finding specific info without loading the entire page.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL to search within" },
-          query: { type: "string", description: "Search term" },
-          render_js: { type: "boolean", default: true },
-        },
-        required: ["url", "query"],
-      },
-    },
-  ],
-}));
-
-server.setRequestHandler("tools/call", async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
-    let result;
-    switch (name) {
-      case "web_outline":
-        result = await getOutline(args.url, args.render_js ?? true);
-        break;
-      case "web_section":
-        result = await getSection(args.url, args.headings, args.render_js ?? true);
-        break;
-      case "web_content":
-        result = await getContent(args.url, args.max_tokens ?? 4000, args.render_js ?? true);
-        break;
-      case "web_search":
-        result = await searchInPage(args.url, args.query, args.render_js ?? true);
-        break;
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
-
-    let text;
-    if (name === "web_outline") {
-      text = `# ${result.title}\n\nSource: ${result.url}\nTotal: ~${result.totalTokens} tokens | ${result.sectionCount} sections | ${result.fromCache ? "cached" : "fresh fetch"}\n\n## Outline\n\n${result.outline}`;
-    } else if (name === "web_section") {
-      if (result.error) {
-        text = `Error: ${result.error}\n\nAvailable sections:\n${result.availableSections.map((s) => `- ${s}`).join("\n")}`;
-      } else {
-        text = `# ${result.title}\n\nSource: ${result.url} | ${result.sectionsReturned} section(s) | ~${result.tokens} tokens | ${result.fromCache ? "cached" : "fresh"}\n\n---\n\n${result.content}`;
-      }
-    } else if (name === "web_content") {
-      text = result.content;
-    } else if (name === "web_search") {
-      if (result.matches.length === 0) {
-        text = `No matches for "${result.query}" in ${result.title}`;
-      } else {
-        text = `# Search: "${result.query}" in ${result.title}\n\n${result.matchCount} match(es) | ${result.fromCache ? "cached" : "fresh"}\n\n${result.matches.map((m) => `## ${m.heading}\n\n${m.excerpt}`).join("\n\n---\n\n")}`;
-      }
-    }
-
-    return { content: [{ type: "text", text }] };
-  } catch (error) {
-    return {
-      content: [{ type: "text", text: `Error: ${error.message}` }],
-      isError: true,
-    };
-  }
+const server = new McpServer({
+  name: "web2md",
+  version: "1.0.0",
 });
 
+// Tool: web_outline
+server.tool(
+  "web_outline",
+  "Get the outline/structure of a webpage. Returns headings with estimated token counts. USE THIS FIRST to understand page structure before fetching content. Very cheap (~200 tokens output).",
+  {
+    url: z.string().describe("URL to fetch"),
+    render_js: z.boolean().default(true).describe("Render JavaScript with Playwright (for SPAs)"),
+  },
+  async ({ url, render_js }) => {
+    const result = await getOutline(url, render_js);
+    const text = `# ${result.title}\n\nSource: ${result.url}\nTotal: ~${result.totalTokens} tokens | ${result.sectionCount} sections | ${result.fromCache ? "cached" : "fresh fetch"}\n\n## Outline\n\n${result.outline}`;
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+// Tool: web_section
+server.tool(
+  "web_section",
+  "Get specific section(s) of a webpage by heading name. Use after web_outline to fetch only what you need. Supports partial heading matches.",
+  {
+    url: z.string().describe("URL to fetch"),
+    headings: z.union([z.string(), z.array(z.string())]).describe("Heading(s) to extract. Partial match supported."),
+    render_js: z.boolean().default(true).describe("Render JavaScript with Playwright"),
+  },
+  async ({ url, headings, render_js }) => {
+    const result = await getSection(url, headings, render_js);
+    let text;
+    if (result.error) {
+      text = `Error: ${result.error}\n\nAvailable sections:\n${result.availableSections.map((s) => `- ${s}`).join("\n")}`;
+    } else {
+      text = `# ${result.title}\n\nSource: ${result.url} | ${result.sectionsReturned} section(s) | ~${result.tokens} tokens | ${result.fromCache ? "cached" : "fresh"}\n\n---\n\n${result.content}`;
+    }
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+// Tool: web_content
+server.tool(
+  "web_content",
+  "Get full page content as markdown. Automatically truncates to max_tokens. Use web_outline + web_section for better efficiency.",
+  {
+    url: z.string().describe("URL to fetch"),
+    max_tokens: z.number().default(4000).describe("Maximum tokens to return"),
+    render_js: z.boolean().default(true).describe("Render JavaScript with Playwright"),
+  },
+  async ({ url, max_tokens, render_js }) => {
+    const result = await getContent(url, max_tokens, render_js);
+    return { content: [{ type: "text", text: result.content }] };
+  }
+);
+
+// Tool: web_search
+server.tool(
+  "web_search",
+  "Search for a term within a webpage. Returns matching sections with context excerpts. Useful for finding specific info without loading the entire page.",
+  {
+    url: z.string().describe("URL to search within"),
+    query: z.string().describe("Search term"),
+    render_js: z.boolean().default(true).describe("Render JavaScript with Playwright"),
+  },
+  async ({ url, query, render_js }) => {
+    const result = await searchInPage(url, query, render_js);
+    let text;
+    if (result.matches.length === 0) {
+      text = `No matches for "${result.query}" in ${result.title}`;
+    } else {
+      text = `# Search: "${result.query}" in ${result.title}\n\n${result.matchCount} match(es) | ${result.fromCache ? "cached" : "fresh"}\n\n${result.matches.map((m) => `## ${m.heading}\n\n${m.excerpt}`).join("\n\n---\n\n")}`;
+    }
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+// Start
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error("web2md MCP server running");
