@@ -78,9 +78,21 @@ async function fetchWithPlaywright(url) {
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
   const page = await context.newPage();
+
   try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    await page.waitForTimeout(1000);
+    // Strategy 1: Try networkidle with short timeout (best for SPAs)
+    try {
+      await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
+    } catch (e) {
+      // Strategy 2: Fall back to domcontentloaded (works for slow/polling sites)
+      console.error(`networkidle timeout for ${url}, falling back to domcontentloaded`);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+      // Give JS a moment to render critical content
+      await page.waitForTimeout(2000);
+    }
+
+    // Extra wait for lazy-loaded content
+    await page.waitForTimeout(500);
     return await page.content();
   } finally {
     await browser.close();
@@ -159,7 +171,26 @@ async function fetchAndParse(url, renderJs = true) {
     return { ...cached, fromCache: true };
   }
 
-  const html = renderJs ? await fetchWithPlaywright(url) : await fetchSimple(url);
+  let html;
+  let fetchMethod = renderJs ? "playwright" : "simple";
+
+  try {
+    html = renderJs ? await fetchWithPlaywright(url) : await fetchSimple(url);
+  } catch (e) {
+    // If Playwright fails entirely, try simple fetch as last resort
+    if (renderJs) {
+      console.error(`Playwright failed for ${url}, trying simple fetch: ${e.message}`);
+      try {
+        html = await fetchSimple(url);
+        fetchMethod = "simple-fallback";
+      } catch (e2) {
+        throw new Error(`All fetch methods failed for ${url}: ${e.message}`);
+      }
+    } else {
+      throw e;
+    }
+  }
+
   const { title, content, byline } = extractContent(html, url);
   const markdown = htmlToMarkdown(content);
   const sections = parseIntoSections(markdown);
@@ -172,6 +203,7 @@ async function fetchAndParse(url, renderJs = true) {
     markdown,
     sections,
     totalTokens,
+    fetchMethod,
     fetchedAt: new Date().toISOString(),
   };
 
