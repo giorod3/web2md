@@ -136,7 +136,7 @@ node server.js &
 ### Option B: From Git
 
 ```bash
-git clone https://github.com/user/web2md.git ~/Development/web2md
+git clone https://github.com/nickarella27/web2md.git ~/Development/web2md
 cd ~/Development/web2md
 npm install
 ```
@@ -285,4 +285,4 @@ rm -rf ~/.cache/web2md
 
 ## License
 
-MIT
+Apache 2.0 - See [LICENSE](LICENSE) for details.

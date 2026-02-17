@@ -29,6 +29,19 @@ const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 const DEFAULT_MAX_TOKENS = 4000;
 const CHARS_PER_TOKEN = 4;
 
+// === URL VALIDATION ===
+function validateUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error(`Invalid protocol: ${parsed.protocol}. Only http/https allowed.`);
+    }
+    return parsed.href;
+  } catch (e) {
+    throw new Error(`Invalid URL: ${url}. ${e.message}`);
+  }
+}
+
 // === CACHE ===
 async function ensureCacheDir() {
   await mkdir(CACHE_DIR, { recursive: true });
@@ -166,7 +179,10 @@ function parseIntoSections(markdown) {
 
 // === MAIN FETCH + PARSE ===
 async function fetchAndParse(url, renderJs = true) {
-  const cached = await getCached(url);
+  // Validate URL before processing
+  const validUrl = validateUrl(url);
+
+  const cached = await getCached(validUrl);
   if (cached) {
     return { ...cached, fromCache: true };
   }
@@ -175,29 +191,29 @@ async function fetchAndParse(url, renderJs = true) {
   let fetchMethod = renderJs ? "playwright" : "simple";
 
   try {
-    html = renderJs ? await fetchWithPlaywright(url) : await fetchSimple(url);
+    html = renderJs ? await fetchWithPlaywright(validUrl) : await fetchSimple(validUrl);
   } catch (e) {
     // If Playwright fails entirely, try simple fetch as last resort
     if (renderJs) {
-      console.error(`Playwright failed for ${url}, trying simple fetch: ${e.message}`);
+      console.error(`Playwright failed for ${validUrl}, trying simple fetch: ${e.message}`);
       try {
-        html = await fetchSimple(url);
+        html = await fetchSimple(validUrl);
         fetchMethod = "simple-fallback";
       } catch (e2) {
-        throw new Error(`All fetch methods failed for ${url}: ${e.message}`);
+        throw new Error(`All fetch methods failed for ${validUrl}: ${e.message}`);
       }
     } else {
       throw e;
     }
   }
 
-  const { title, content, byline } = extractContent(html, url);
+  const { title, content, byline } = extractContent(html, validUrl);
   const markdown = htmlToMarkdown(content);
   const sections = parseIntoSections(markdown);
   const totalTokens = Math.ceil(markdown.length / CHARS_PER_TOKEN);
 
   const result = {
-    url,
+    url: validUrl,
     title,
     byline,
     markdown,
@@ -207,7 +223,7 @@ async function fetchAndParse(url, renderJs = true) {
     fetchedAt: new Date().toISOString(),
   };
 
-  await setCache(url, result);
+  await setCache(validUrl, result);
   return { ...result, fromCache: false };
 }
 
